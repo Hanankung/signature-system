@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Smalot\PdfParser\Parser;
 use setasign\Fpdi\Tcpdf\Fpdi;
+use App\Models\PdfDocument;
 
 class PdfController extends Controller
 {
@@ -13,78 +14,98 @@ class PdfController extends Controller
         return view('pdf');
     }
 
-    public function sign(Request $request)
+    public function preview($id)
     {
-        $request->validate([
-            'pdf' => 'required|file|mimes:pdf',
-            'signature' => 'required|file|mimes:png'
-        ]);
+        $doc = PdfDocument::findOrFail($id);
+        return view('pdf', compact('doc'));
+    }
 
-        // ========== ตรวจสอบว่าไฟล์ถูกส่งมาจริงไหม ==========
-        if (!$request->hasFile('pdf')) {
-            return 'ไม่ได้เลือกไฟล์ PDF';
-        }
+    public function signDocument($id)
+    {
+        $doc = PdfDocument::findOrFail($id);
 
-        if (!$request->file('pdf')->isValid()) {
-            return 'ไฟล์ PDF อัปโหลดไม่สำเร็จ';
-        }
+        $pdfPath = storage_path('app/pdfs/' . $doc->filename);
+        $signPath = storage_path('app/signatures/sign.png'); // ลายเซ็น
 
-        if (!$request->hasFile('signature')) {
-            return 'ไม่ได้เลือกรูปเซ็น';
-        }
+        $pageMarkers = $doc->page_markers; // มาจาก DB
 
-        if (!$request->file('signature')->isValid()) {
-            return 'ไฟล์ลายเซ็นอัปโหลดไม่สำเร็จ';
-        }
-        // ====================================================
-
-
-        // ==== อัปโหลดไฟล์ ====
-        $pdfFile = $request->file('pdf');
-        $signFile = $request->file('signature');
-
-        $pdfName = 'input.pdf';
-        $signName = 'sign.png';
-
-        $pdfFile->move(storage_path('app/pdfs'), $pdfName);
-        $signFile->move(storage_path('app/signatures'), $signName);
-
-        $fullPdfPath = storage_path('app/pdfs/' . $pdfName);
-        $fullSignPath = storage_path('app/signatures/' . $signName);
-
-        if (!file_exists($fullPdfPath)) {
-            return "PDF ไม่ถูกอัปโหลดเข้า storage/app/pdfs";
-        }
-
-        // ==== อ่าน PDF ====
-        $parser = new Parser();
-        $pdf = $parser->parseFile($fullPdfPath);
-        $text = $pdf->getText();
-
-        if (strpos($text, "ลงนาม") === false) {
-            return "ไม่พบคำว่า ลงนาม";
-        }
-
-        // ==== วางลายเซ็น ====
         $fpdi = new \setasign\Fpdi\Tcpdf\Fpdi();
-        $pageCount = $fpdi->setSourceFile($fullPdfPath);
+        $pageCount = $fpdi->setSourceFile($pdfPath);
 
-        for ($i = 1; $i <= $pageCount; $i++) {
+        // =================== 🔽 ตรงนี้แหละ STEP 6 ===================
+        for ($page = 1; $page <= $pageCount; $page++) {
 
-            $template = $fpdi->importPage($i);
+            $template = $fpdi->importPage($page);
             $size = $fpdi->getTemplateSize($template);
 
             $fpdi->AddPage($size['orientation'], [$size['width'], $size['height']]);
             $fpdi->useTemplate($template);
 
-            if ($i == 1) {
-                $fpdi->Image($fullSignPath, 120, 240, 40);
+            // ถ้ามี marker ในหน้านี้ → ค่อยเซ็น
+            if (isset($pageMarkers[$page])) {
+                foreach ($pageMarkers[$page] as $p) {
+                    $fpdi->Image(
+                        $signPath,
+                        $p['x'] * 0.75,
+                        $p['y'] * 0.75,
+                        40
+                    );
+                }
             }
         }
 
-        $output = storage_path('app/signed.pdf');
+        // =================== 🔼 STEP 6 จบ ===================
+
+        $output = storage_path('app/signed_' . $doc->id . '.pdf');
         $fpdi->Output($output, 'F');
 
         return response()->download($output);
+    }
+
+
+    public function upload(Request $request)
+    {
+        $request->validate([
+            'pdf' => 'required|file|mimes:pdf'
+        ]);
+
+        $file = $request->file('pdf');
+        $filename = time() . '.pdf';
+        $file->move(storage_path('app/pdfs'), $filename);
+
+        // นับจำนวนหน้า
+        $fpdi = new Fpdi();
+        $pageCount = $fpdi->setSourceFile(storage_path('app/pdfs/' . $filename));
+
+        $doc = PdfDocument::create([
+            'name' => 'เอกสารลงนาม',
+            'filename' => $filename,
+            'total_pages' => $pageCount,
+            'saved_at' => now()
+        ]);
+
+        return redirect('/pdf/preview/' . $doc->id);
+    }
+
+    public function saveMarkers(Request $request, $id)
+    {
+        $doc = PdfDocument::findOrFail($id);
+
+        $markers = $request->markers;
+        
+        $request->validate([
+            'markers' => 'required|array'
+        ]);
+
+
+        $pageMarkers = collect($markers)->groupBy('page');
+
+        $doc->update([
+            'markers' => $markers,
+            'page_markers' => $pageMarkers,
+            'marker_counter' => count($markers)
+        ]);
+
+        return response()->json(['status' => 'ok']);
     }
 }
