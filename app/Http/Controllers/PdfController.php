@@ -25,79 +25,115 @@ class PdfController extends Controller
     {
         $doc = PdfDocument::findOrFail($id);
 
+        if (!$doc->signature_file) {
+            return back()->with('error', 'กรุณาอัปโหลดลายเซ็นก่อน');
+        }
+
+        if (!$doc->page_markers || count($doc->page_markers) == 0) {
+            return back()->with('error', 'กรุณาเลือกตำแหน่งเซ็นก่อน');
+        }
+
         $pdfPath = storage_path('app/public/pdfs/' . $doc->filename);
-        $signPath = storage_path('app/signatures/sign.png'); // ลายเซ็น
+        $signPath = storage_path('app/public/signatures/' . $doc->signature_file);
 
-        $pageMarkers = $doc->page_markers; // มาจาก DB
+        if (!file_exists($pdfPath)) dd("PDF not found", $pdfPath);
+        if (!file_exists($signPath)) dd("SIGN not found", $signPath);
 
-        $fpdi = new \setasign\Fpdi\Tcpdf\Fpdi();
+        $fpdi = new Fpdi();
         $pageCount = $fpdi->setSourceFile($pdfPath);
 
-        // =================== 🔽 ตรงนี้แหละ STEP 6 ===================
-        for ($page = 1; $page <= $pageCount; $page++) {
-
-            $template = $fpdi->importPage($page);
-            $size = $fpdi->getTemplateSize($template);
+        foreach (range(1, $pageCount) as $page) {
+            $tpl = $fpdi->importPage($page);
+            $size = $fpdi->getTemplateSize($tpl);
 
             $fpdi->AddPage($size['orientation'], [$size['width'], $size['height']]);
-            $fpdi->useTemplate($template);
+            $fpdi->useTemplate($tpl);
 
-            // ถ้ามี marker ในหน้านี้ → ค่อยเซ็น
-            if (isset($pageMarkers[$page])) {
-                foreach ($pageMarkers[$page] as $p) {
+            if (isset($doc->page_markers[$page])) {
+                foreach ($doc->page_markers[$page] as $p) {
+                    $canvasWidth  = $p['canvas_width'];
+                    $canvasHeight = $p['canvas_height'];
+
+                    $pdfX = ($p['x'] / $canvasWidth)  * $size['width'];
+                    $pdfY = ($p['y'] / $canvasHeight) * $size['height'];
+
                     $fpdi->Image(
                         $signPath,
-                        $p['x'] * 0.75,
-                        $p['y'] * 0.75,
+                        $pdfX,
+                        $pdfY,
                         40
                     );
                 }
             }
         }
 
-        // =================== 🔼 STEP 6 จบ ===================
+        // 🔥 บันทึกไฟล์ลง public disk
+        $signedFilename = 'signed_' . $doc->id . '.pdf';
+        $signedPath = storage_path('app/public/signed/' . $signedFilename);
 
-        $output = storage_path('app/signed_' . $doc->id . '.pdf');
-        $fpdi->Output($output, 'F');
+        // สร้างโฟลเดอร์ถ้ายังไม่มี
+        if (!file_exists(dirname($signedPath))) {
+            mkdir(dirname($signedPath), 0775, true);
+        }
 
-        return response()->download($output);
+        $fpdi->Output($signedPath, 'F');
+
+        // ตรวจว่ามีไฟล์จริง
+        if (!file_exists($signedPath)) {
+            dd("SIGN FILE NOT CREATED", $signedPath);
+        }
+
+        return response()->download($signedPath);
     }
+
 
 
     public function upload(Request $request)
     {
         $request->validate([
-            'pdf' => 'required|file|mimes:pdf'
+            'pdf' => 'required|file|mimes:pdf',
+            'signature' => 'required|image|mimes:png,jpg,jpeg'
         ]);
 
-        $file = $request->file('pdf');
-        $filename = time() . '.pdf';
+        // ===== 1. บันทึก PDF =====
+        $pdfFile = $request->file('pdf');
+        $pdfName = time() . '.pdf';
 
-        // 1) บันทึกไฟล์ลง public disk
-        Storage::disk('public')->putFileAs('pdfs', $file, $filename);
+        Storage::disk('public')->putFileAs('pdfs', $pdfFile, $pdfName);
+        $pdfPath = storage_path('app/public/pdfs/' . $pdfName);
 
-        // 2) ได้ path จริงบน disk
-        $realPath = storage_path('app/public/pdfs/' . $filename);
-
-        // 3) เช็คว่ามีจริง
-        if (!file_exists($realPath)) {
-            dd("FILE NOT FOUND", $realPath);
+        if (!file_exists($pdfPath)) {
+            dd("PDF NOT SAVED", $pdfPath);
         }
 
-        // 4) นับจำนวนหน้า
+        // ===== 2. นับหน้า =====
         $fpdi = new Fpdi();
-        $pageCount = $fpdi->setSourceFile($realPath);
+        $pageCount = $fpdi->setSourceFile($pdfPath);
 
-        // 5) บันทึก DB
+        // ===== 3. สร้าง record =====
         $doc = PdfDocument::create([
             'name' => 'เอกสารลงนาม',
-            'filename' => $filename,
+            'filename' => $pdfName,
             'total_pages' => $pageCount,
             'saved_at' => now()
         ]);
 
+        // ===== 4. บันทึกลายเซ็น =====
+        $signName = 'sign_' . $doc->id . '.png';
+
+        Storage::disk('public')->putFileAs(
+            'signatures',
+            $request->file('signature'),
+            $signName
+        );
+
+        $doc->update([
+            'signature_file' => $signName
+        ]);
+
         return redirect('/pdf/preview/' . $doc->id);
     }
+
 
     public function saveMarkers(Request $request, $id)
     {
@@ -129,12 +165,14 @@ class PdfController extends Controller
 
         $doc = PdfDocument::findOrFail($id);
 
-        // เก็บลายเซ็นแบบแยกตามเอกสาร
         $filename = 'sign_' . $doc->id . '.png';
 
-        Storage::disk('public')->putFileAs('signatures', $request->file('signature'), $filename);
+        Storage::disk('public')->putFileAs(
+            'signatures',
+            $request->file('signature'),
+            $filename
+        );
 
-        // เก็บชื่อไฟล์ไว้ใน DB
         $doc->update([
             'signature_file' => $filename
         ]);

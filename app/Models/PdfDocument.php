@@ -19,7 +19,8 @@ class PdfDocument extends Model
         'markers',
         'page_markers',
         'marker_counter',
-        'saved_at'
+        'saved_at',
+        'signature_file'
     ];
 
     protected $casts = [

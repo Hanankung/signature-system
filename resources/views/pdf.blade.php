@@ -27,9 +27,15 @@
 
         <form action="/pdf/upload" method="POST" enctype="multipart/form-data">
             @csrf
+
+            <p>📄 เลือกไฟล์ PDF</p>
             <input type="file" name="pdf" required>
+
+            <p>✍️ เลือกลายเซ็น (PNG/JPG)</p>
+            <input type="file" name="signature" accept="image/*" required>
+
             <br><br>
-            <button type="submit">อัปโหลดและเลือกตำแหน่งเซ็น</button>
+            <button type="submit">อัปโหลดและไปเลือกตำแหน่งเซ็น</button>
         </form>
     @else
         {{-- ================== ส่วน Preview + Marker ================== --}}
@@ -48,7 +54,6 @@
 
         <br><br>
         <button onclick="saveMarkers()">บันทึกตำแหน่งเซ็น</button>
-
         <form action="/pdf/sign/{{ $doc->id }}" method="POST">
             @csrf
             <button type="submit">✅ ยืนยันเซ็นเอกสาร</button>
@@ -63,7 +68,7 @@
 
             pdfjsLib.GlobalWorkerOptions.workerSrc =
                 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                
+
             pdfjsLib.getDocument('/storage/pdfs/{{ $doc->filename }}').promise.then(pdf => {
                 pdfDoc = pdf;
                 renderPage(pageNum);
@@ -114,8 +119,11 @@
                 let marker = {
                     page: pageNum,
                     x: x,
-                    y: y
+                    y: y,
+                    canvas_width: canvas.width,
+                    canvas_height: canvas.height
                 };
+
 
                 markers.push(marker);
                 drawMarker(x, y);
