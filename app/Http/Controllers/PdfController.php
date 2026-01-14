@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Smalot\PdfParser\Parser;
 use setasign\Fpdi\Tcpdf\Fpdi;
 use App\Models\PdfDocument;
+use Illuminate\Support\Facades\Storage;
 
 class PdfController extends Controller
 {
@@ -24,7 +25,7 @@ class PdfController extends Controller
     {
         $doc = PdfDocument::findOrFail($id);
 
-        $pdfPath = storage_path('app/pdfs/' . $doc->filename);
+        $pdfPath = storage_path('app/public/pdfs/' . $doc->filename);
         $signPath = storage_path('app/signatures/sign.png'); // ลายเซ็น
 
         $pageMarkers = $doc->page_markers; // มาจาก DB
@@ -71,12 +72,23 @@ class PdfController extends Controller
 
         $file = $request->file('pdf');
         $filename = time() . '.pdf';
-        $file->move(storage_path('app/pdfs'), $filename);
 
-        // นับจำนวนหน้า
+        // 1) บันทึกไฟล์ลง public disk
+        Storage::disk('public')->putFileAs('pdfs', $file, $filename);
+
+        // 2) ได้ path จริงบน disk
+        $realPath = storage_path('app/public/pdfs/' . $filename);
+
+        // 3) เช็คว่ามีจริง
+        if (!file_exists($realPath)) {
+            dd("FILE NOT FOUND", $realPath);
+        }
+
+        // 4) นับจำนวนหน้า
         $fpdi = new Fpdi();
-        $pageCount = $fpdi->setSourceFile(storage_path('app/pdfs/' . $filename));
+        $pageCount = $fpdi->setSourceFile($realPath);
 
+        // 5) บันทึก DB
         $doc = PdfDocument::create([
             'name' => 'เอกสารลงนาม',
             'filename' => $filename,
@@ -92,7 +104,7 @@ class PdfController extends Controller
         $doc = PdfDocument::findOrFail($id);
 
         $markers = $request->markers;
-        
+
         $request->validate([
             'markers' => 'required|array'
         ]);
@@ -107,5 +119,26 @@ class PdfController extends Controller
         ]);
 
         return response()->json(['status' => 'ok']);
+    }
+
+    public function uploadSignature(Request $request, $id)
+    {
+        $request->validate([
+            'signature' => 'required|image|mimes:png,jpg,jpeg'
+        ]);
+
+        $doc = PdfDocument::findOrFail($id);
+
+        // เก็บลายเซ็นแบบแยกตามเอกสาร
+        $filename = 'sign_' . $doc->id . '.png';
+
+        Storage::disk('public')->putFileAs('signatures', $request->file('signature'), $filename);
+
+        // เก็บชื่อไฟล์ไว้ใน DB
+        $doc->update([
+            'signature_file' => $filename
+        ]);
+
+        return back()->with('success', 'อัปโหลดลายเซ็นเรียบร้อย');
     }
 }

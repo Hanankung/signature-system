@@ -14,3 +14,5 @@ Route::post('/pdf/upload', [PdfController::class, 'upload']);
 Route::get('/pdf/preview/{id}', [PdfController::class, 'preview']);
 Route::post('/pdf/save-markers/{id}', [PdfController::class, 'saveMarkers']);
 Route::post('/pdf/sign/{id}', [PdfController::class, 'signDocument']);
+Route::post('/pdf/upload-signature/{id}', [PdfController::class, 'uploadSignature']);
+
