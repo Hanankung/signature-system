@@ -5,95 +5,173 @@
     <meta charset="UTF-8">
     <title>PDF Sign System</title>
 
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <style>
+        :root {
+            --thai-blue: #102a43;
+            --thai-blue2: #1c4d7a;
+            --thai-gold: #d4af37;
+            --soft-bg: #f4f7fb;
+        }
+
+        * {
+            box-sizing: border-box;
+            font-family: "Sarabun", sans-serif;
+        }
+
         body {
             margin: 0;
-            font-family: 'Segoe UI', sans-serif;
-            background: #f1f3f6;
+            background: var(--soft-bg);
         }
 
+        /* ===== HEADER ===== */
         header {
-            background: linear-gradient(90deg, #1e3c72, #2a5298);
+            background: linear-gradient(90deg, #0b2540, #163f68);
             color: white;
-            padding: 16px 30px;
-            font-size: 20px;
-            font-weight: bold;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+            padding: 20px 40px;
+            font-size: 22px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
+            border-bottom: 4px solid var(--thai-gold);
         }
 
+        /* ===== LAYOUT ===== */
         .container {
             display: flex;
-            height: calc(100vh - 70px);
+            min-height: calc(100vh - 85px);
         }
 
+
+        /* ===== SIDEBAR ===== */
         .sidebar {
-            width: 320px;
-            background: white;
+            width: 340px;
+            background: #ffffff;
             padding: 20px;
-            border-right: 1px solid #ddd;
+            border-right: 2px solid #e0e6f0;
+            overflow: visible;
+            align-self: stretch;
+        }
+
+
+        /* ===== CONTENT ===== */
+        .content {
+            flex: 1;
+            padding: 30px;
+            background: #f6f9ff;
             overflow-y: auto;
         }
 
-        .content {
-            flex: 1;
-            padding: 20px;
-            overflow: auto;
-        }
 
+        /* ===== CARD ===== */
         .card {
-            background: white;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, .05);
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 18px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, .08);
+            border-left: 6px solid var(--thai-blue);
+            position: relative;
         }
 
+        .card::after {
+            content: "";
+            position: absolute;
+            right: 12px;
+            top: 12px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--thai-gold);
+            opacity: .3;
+        }
+
+        .card h3 {
+            margin-top: 0;
+            font-size: 18px;
+            color: var(--thai-blue);
+            border-bottom: 1px solid #e1e8f0;
+            padding-bottom: 8px;
+        }
+
+        /* ===== STAT ===== */
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            font-size: 15px;
+            color: #333;
+        }
+
+        /* ===== BUTTONS ===== */
         .btn {
             width: 100%;
-            padding: 10px;
+            padding: 13px;
             border: none;
-            border-radius: 6px;
-            font-weight: bold;
-            margin-top: 8px;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            margin-top: 10px;
             cursor: pointer;
+            transition: .2s;
         }
 
         .btn-blue {
-            background: #2a5298;
+            background: linear-gradient(90deg, #0b2540, #1c4d7a);
             color: white;
+            box-shadow: 0 4px 12px rgba(28, 77, 122, .4);
+        }
+
+        .btn-blue:hover {
+            filter: brightness(1.15);
         }
 
         .btn-red {
-            background: #e74c3c;
+            background: linear-gradient(90deg, #b8322a, #e74c3c);
             color: white;
         }
 
         .btn-gray {
-            background: #ddd;
+            background: #e4ebf4;
+            color: #333;
         }
 
+        /* ===== CANVAS ===== */
         canvas {
-            border: 1px solid #aaa;
-            border-radius: 8px;
+            border-radius: 14px;
+            border: 2px solid #cfd8e6;
             background: white;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, .1);
-            cursor: crosshair;
+            box-shadow: 0 15px 35px rgba(16, 42, 67, .2);
         }
 
+        /* ===== PAGE CONTROL ===== */
+        .content button {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid #cfd8e6;
+            background: white;
+            font-weight: 500;
+        }
+
+        /* ===== MARKERS ===== */
         .marker-row {
             font-size: 13px;
-            padding: 5px 0;
-            border-bottom: 1px solid #eee;
+            padding: 7px 0;
+            border-bottom: 1px dashed #ccc;
         }
 
-        .stat {
-            display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-            margin: 5px 0;
+        /* ===== FILE INPUT ===== */
+        input[type=file] {
+            width: 100%;
+            padding: 9px;
+            border-radius: 8px;
+            border: 1px solid #cfd8e6;
+            background: #f8fbff;
         }
     </style>
 </head>
@@ -101,8 +179,13 @@
 <body>
 
     <header>
-        📄 ระบบลงนามเอกสารอิเล็กทรอนิกส์
+        🏛 ระบบลงนามเอกสารอิเล็กทรอนิกส์
+        <span style="font-size:14px;opacity:.8">
+            (Government Digital Signature Platform)
+        </span>
     </header>
+
+
 
     @if (!isset($doc))
         <div class="container">
@@ -121,8 +204,13 @@
             </div>
             <div class="content">
                 <div class="card">
-                    <h2>ยินดีต้อนรับ</h2>
-                    <p>อัปโหลดไฟล์ PDF และลายเซ็น เพื่อเริ่มกระบวนการลงนามเอกสาร</p>
+                    <h2 style="color:#102a43">ระบบลงนามเอกสารอิเล็กทรอนิกส์</h2>
+                    <p style="color:#444">
+                        แพลตฟอร์มสำหรับหน่วยงานภาครัฐ
+                        ใช้ในการลงนามเอกสาร PDF แบบดิจิทัล
+                        เพื่อเพิ่มความรวดเร็ว ความถูกต้อง และความปลอดภัยของเอกสารราชการ
+                    </p>
+
                 </div>
             </div>
         </div>

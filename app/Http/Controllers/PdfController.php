@@ -67,7 +67,7 @@ class PdfController extends Controller
             }
         }
 
-        // 🔥 บันทึกไฟล์ลง public disk
+        // บันทึกไฟล์ลง public disk
         $signedFilename = 'signed_' . $doc->id . '.pdf';
         $signedPath = storage_path('app/public/signed/' . $signedFilename);
 
