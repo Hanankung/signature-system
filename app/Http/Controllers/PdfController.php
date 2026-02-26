@@ -33,6 +33,7 @@ class PdfController extends Controller
             return back()->with('error', 'กรุณาเลือกตำแหน่งเซ็นก่อน');
         }
 
+        // ที่เก็บไฟล์ PDF และลายเซ็น
         $pdfPath = storage_path('app/public/pdfs/' . $doc->filename);
         $signPath = storage_path('app/public/signatures/' . $doc->signature_file);
 
@@ -134,7 +135,7 @@ class PdfController extends Controller
         return redirect('/pdf/preview/' . $doc->id);
     }
 
-
+    // บันทึกตำแหน่งมาร์ก
     public function saveMarkers(Request $request, $id)
     {
         $doc = PdfDocument::findOrFail($id);
@@ -157,6 +158,7 @@ class PdfController extends Controller
         return response()->json(['status' => 'ok']);
     }
 
+        // อัปโหลดรูปลายเซ็น
     public function uploadSignature(Request $request, $id)
     {
         $request->validate([
